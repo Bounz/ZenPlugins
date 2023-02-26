@@ -78,10 +78,11 @@ export function convertCard (rawCard) {
  * @returns транзакция в формате Дзенмани
  */
 export function convertUzcardCardTransaction (cardId, rawTransaction) {
-  const invoice = {
-    sum: rawTransaction.credit === true || rawTransaction.reversal === true ? rawTransaction.actamt / 100 : -rawTransaction.actamt / 100,
-    instrument: 'UZS'
-  }
+  // const invoice = {
+  //   sum: rawTransaction.credit === true || rawTransaction.reversal === true ? rawTransaction.actamt / 100 : -rawTransaction.actamt / 100,
+  //   instrument: 'UZS'
+  // }
+  const invoice = {}
   const transaction = {
     comment: null,
     date: new Date(rawTransaction.utime),

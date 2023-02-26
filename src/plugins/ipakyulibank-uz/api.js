@@ -316,25 +316,26 @@ export async function getUzcardCardsTransactions (cards, fromDate, toDate) {
 
   for (const card of cards) {
     if (!ZenMoney.isAccountSkipped(card.id)) {
-      const endpoint = '/uzcard/history?' +
-        'cardId=' + card.id + '&' +
-        'dateFrom=' + fromDate + '&' +
-        'dateTo=' + toDate
+      const endpoint = '/cabinet/card-info'
 
       const response = await fetchJson(baseUrl + endpoint, {
-        method: 'GET',
+        method: 'POST',
         headers: {
-          lang,
-          'app-version': appVersion,
-          'device-id': ZenMoney.getData('deviceId'),
-          token: ZenMoney.getData('token')
+          'X-AppToken': ZenMoney.getData('token'),
+          'X-AppKey': 'blablakey',
+          'X-AppLang': 'ru',
+          'X-AppRef': '/cabinet/login'
         },
-        sanitizeRequestLog: { headers: { 'device-id': true, token: true } }
+        body: {
+          id: card.id,
+          type: 'uzcard'
+        },
+        sanitizeRequestLog: { headers: { token: true } }
       })
 
       console.assert(response.ok, 'unexpected uzcard/history response', response)
 
-      transactions = transactions.concat(response.body.data.data.map(transaction =>
+      transactions = transactions.concat(response.body.data.vpiska.map(transaction =>
         convertUzcardCardTransaction(card, transaction)))
     }
   }
