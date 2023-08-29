@@ -1,12 +1,15 @@
+import { generateRandomString } from '../../common/utils'
+import { BankMessageError } from '../../errors'
 import {
   // checkUser,
   // getAccounts,
   // getAccountsTransactions,
   // getHumoCards,
   // getHumoCardsTransactions,
-  authorize,
-  getToken,
-  getCards
+  getCards,
+  loginStart,
+  loginConfirm
+  // getUserDevices
   // getUzcardCardsTransactions,
   // getVisaCards,
   // getVisaCardsTransactions,
@@ -21,22 +24,47 @@ export async function scrape ({ preferences, fromDate, toDate, isFirstRun }) {
    * FIRST RUN STEPS
    */
   if (isFirstRun) {
-    // await registerDevice()
+    const mobileId = 'zm-' + generateRandomString(16)
+    ZenMoney.setData('mobileId', mobileId)
     await updateToken(preferences.login, preferences.password)
   }
 
   try {
     return await doScrape(fromDate, toDate)
-  } catch {
+  } catch (error) {
+    if (error.code === 109) {
+      ZenMoney.trace(error.message)
+      throw new BankMessageError('Превышено максимальное количество устройств. Отвяжите устройство в приложении.', false)
+    }
     await updateToken(preferences.login, preferences.password)
     return await doScrape(fromDate, toDate)
   }
 }
 
 async function updateToken (login, password) {
-  await authorize(login, password)
+  try {
+    await loginStart(login, password)
+  } catch (error) {
+    if (error.code === 100) {
+      ZenMoney.trace(error.message)
+      throw new BankMessageError(error.message, false)
+    } else {
+      throw new BankMessageError(error.message, false)
+    }
+  }
+
   const smsCode = await ZenMoney.readLine('Введите код из СМС сообщения')
-  await getToken(smsCode)
+
+  try {
+    await loginConfirm(ZenMoney.getData('userId'), smsCode)
+  } catch (error) {
+    if (error.code === 100) {
+      ZenMoney.console.error(error.error_text)
+      ZenMoney.Error(error.error_text, true, false)
+      return
+    }
+  }
+  ZenMoney.setData('isFirstRun', false)
 }
 
 async function doScrape (fromDate, toDate) {

@@ -1,7 +1,5 @@
 import { fetchJson } from '../../common/network'
 // import { sanitize } from '../../common/sanitize'
-import { generateRandomString } from '../../common/utils'
-import { InvalidPreferencesError } from '../../errors'
 import {
   convertAccount,
   convertAccountTransaction,
@@ -14,154 +12,87 @@ import {
 } from './converters'
 
 const lang = 'ru'
-const appVersion = 'w0.0.2'
-const baseUrl = 'https://ipakyulibank.uz:8888/webapi'
-const baseUrlV2 = 'no.txs'
+const appVersion = '2'
+const mobileDevice = 'ZenMoney'
+const baseUrl = 'https://umobile.ipakyulibank.uz:5444'
 
-/**
- * Регистрирует идентификатор устройства в интернет-банке
- */
-export async function registerDevice () {
-  const endpoint = '/device'
-  const deviceId = generateRandomString(32)
-
-  const response = await fetchJson(baseUrl + endpoint, {
-    method: 'POST',
-    headers: {
-      lang,
-      'app-version': appVersion
-    },
-    body: {
-      deviceId,
-      name: 'ZenMoney'
-    },
-    sanitizeRequestLog: { body: { deviceId: true } }
-  })
-
-  console.assert(response.ok, 'unexpected device response', response)
-
-  ZenMoney.setData('deviceId', deviceId)
+function ServerException (code, message) {
+  this.code = code
+  this.message = message
 }
 
-export async function authorize (login, password) {
-  const endpoint = '/cabinet/login'
+function throwBankError (response) {
+  if (response.body.state === 'error') {
+    ZenMoney.trace(response.body.error_text)
+    throw new ServerException(response.body.code, response.body.error_text)
+  }
+}
+
+export async function loginStart (login, password) {
+  const endpoint = '/api-live/login/'
 
   const response = await fetchJson(baseUrl + endpoint, {
     method: 'POST',
     headers: {
-      'X-AppKey': 'blablakey',
-      'X-AppLang': 'ru',
-      'X-AppRef': '/cabinet/login'
+      'x-mobileversion': appVersion,
+      'x-mobiledevice': mobileDevice,
+      'x-mobileid': ZenMoney.getData('mobileId')
     },
     body: {
       login,
-      password
+      password,
+      type: 'physic'
     },
     sanitizeRequestLog: { body: { password: true } }
   })
 
-  console.assert(response.ok, 'unexpected device response', response)
+  console.assert(response.ok, 'unexpected login response', response)
+  throwBankError(response)
 
   ZenMoney.setData('userId', response.body.data.id)
 }
 
-/**
- * Проверка на существование клиента в банке и получение номера телефона
- *
- * @param pan номер карты клиента
- * @param expiry срок действия карты клиента
- * @returns номер телефона клиента
- */
-export async function checkUser (pan, expiry) {
-  const endpoint = '/check-client-card'
-
+export async function loginConfirm (userId, code) {
+  const endpoint = '/api-live/login/confirm/'
   const response = await fetchJson(baseUrl + endpoint, {
     method: 'POST',
     headers: {
-      lang,
-      'app-version': appVersion,
-      'device-id': ZenMoney.getData('deviceId')
+      'x-mobileversion': appVersion,
+      'x-mobiledevice': mobileDevice,
+      'x-mobileid': ZenMoney.getData('mobileId')
     },
     body: {
-      pan,
-      expiry
+      user_id: userId,
+      code
     },
-    sanitizeRequestLog: { url: { query: { pan: true, expiry: true } }, headers: { 'device-id': true } },
-    sanitizeResponseLog: { url: { query: { phone: true } } }
+    sanitizeRequestLog: { body: { password: true } }
   })
 
-  if (!response.body?.data?.client) {
-    throw new InvalidPreferencesError()
-  }
-
-  console.assert(response.ok, 'unexpected check-user response', response)
-
-  return response.body.data.phone
-}
-
-/**
- * Вызвать отправку СМС кода на мобильный телефон
- *
- * @param pan номер карты клиента
- * @param expiry срок действия карты клиента
- * @param password пароль
- */
-export async function sendSmsCode (pan, expiry, password) {
-  const endpoint = '/login'
-
-  const response = await fetchJson(baseUrlV2 + endpoint, {
-    method: 'POST',
-    headers: {
-      lang,
-      'app-version': appVersion,
-      'device-id': ZenMoney.getData('deviceId')
-    },
-    body: {
-      pan,
-      expiry,
-      password,
-      reserveSms: false
-    },
-    sanitizeRequestLog: { body: { pan: true, expiry: true, password: true }, headers: { 'device-id': true } }
-  })
-
-  if (response.body?.errorMessage === 'Пользователь не зарегистрирован' || response.body?.errorMessage === 'Неправильный номер телефона или пароль') {
-    throw new InvalidPreferencesError()
-  }
-
-  console.assert(response.ok, 'unexpected login response', response)
-}
-
-/**
- * Получаем токен
- *
- * @param smsCode код подтверждения из СМС сообщения
- */
-export async function getToken (smsCode) {
-  const endpoint = '/cabinet/login-confirm'
-
-  const response = await fetchJson(baseUrl + endpoint, {
-    method: 'POST',
-    headers: {
-      'X-AppKey': 'blablakey',
-      'X-AppLang': 'ru',
-      'X-AppRef': '/cabinet/login'
-    },
-    body: {
-      user_id: ZenMoney.getData('userId'),
-      code: smsCode
-    },
-    sanitizeRequestLog: { headers: { user_id: true } }
-  })
-
-  if (response.body?.errorMessage === 'Пользователь не зарегистрирован' || response.body?.errorMessage === 'Неверный SMS-код') {
-    throw new InvalidPreferencesError()
-  }
-
-  console.assert(response.ok, 'unexpected registration/verify response', response)
+  console.assert(response.ok, 'unexpected loginConfirm response', response)
+  throwBankError(response)
 
   ZenMoney.setData('token', response.body.data.token)
   ZenMoney.setData('isFirstRun', false)
+}
+
+export async function getUserDevices () {
+  const endpoint = '/api-live/user/devices/'
+
+  const response = await fetchJson(baseUrl + endpoint, {
+    method: 'POST',
+    headers: {
+      'x-mobileversion': appVersion,
+      'x-mobiledevice': mobileDevice,
+      'x-mobileid': ZenMoney.getData('mobileId'),
+      'x-mobileapp': ZenMoney.getData('token')
+    },
+    sanitizeRequestLog: { headers: { 'x-mobileapp': true } }
+  })
+
+  console.assert(response.ok, 'unexpected getUserDevices response', response)
+  throwBankError(response)
+
+  return response.body.data
 }
 
 /**
@@ -184,27 +115,29 @@ export async function getUzcardCards () {
   })
 
   console.assert(response.ok, 'unexpected uzcard response', response)
+  throwBankError(response)
 
   return response.body.data.map(convertCard).filter(card => card !== null)
 }
 
 export async function getCards () {
-  const endpoint = '/cabinet/cards'
+  const endpoint = '/api-live/cards/all/'
 
   const response = await fetchJson(baseUrl + endpoint, {
     method: 'POST',
     headers: {
-      'X-AppToken': ZenMoney.getData('token'),
-      'X-AppKey': 'blablakey',
-      'X-AppLang': 'ru',
-      'X-AppRef': '/cabinet/login'
+      'x-mobileversion': appVersion,
+      'x-mobiledevice': mobileDevice,
+      'x-mobileid': ZenMoney.getData('mobileId'),
+      'x-mobileapp': ZenMoney.getData('token')
     },
-    sanitizeRequestLog: { headers: { 'X-AppToken': true } }
+    sanitizeRequestLog: { headers: { 'x-mobileapp': true } }
   })
 
   console.assert(response.ok, 'unexpected getCards response', response)
+  throwBankError(response)
 
-  return response.body.data.cards.map(convertCard).filter(card => card !== null)
+  return response.body.data.map(convertCard).filter(card => card !== null)
 }
 
 /**
@@ -227,6 +160,7 @@ export async function getHumoCards () {
   })
 
   console.assert(response.ok, 'unexpected humo response', response)
+  throwBankError(response)
 
   return response.body.data.map(convertCard).filter(card => card !== null)
 }

@@ -41,21 +41,21 @@ export function convertWallet (wallet) {
  * @returns карта в формате Дзенмани
  */
 export function convertCard (rawCard) {
-  if (rawCard.status !== 0) {
+  if (rawCard.state !== 0) {
     return null
   }
 
   const card = {
     id: String(rawCard.id),
     title: rawCard.title,
-    syncIds: [rawCard.number],
+    syncIds: [rawCard.pan],
     instrument: rawCard.currency,
     type: 'ccard',
     balance: rawCard.balance / 100
   }
 
   if (!rawCard.title) {
-    card.title = rawCard.type + ' *' + rawCard.number.slice(-4)
+    card.title = rawCard.type + ' *' + rawCard.pan.slice(-4)
   }
 
   // В связи с проблемами у пользователей подключения плагина считаю целесообразным убрать р/с из массива неизменных идентификаторов. Есть два фактора влияющие на появление ошибок:
